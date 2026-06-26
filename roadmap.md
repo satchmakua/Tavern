@@ -8,7 +8,7 @@ Track live status in [progress.md](progress.md).
 
 ## Kill test (before any code)
 
-Install Ollama, pull `llama3.1:8b-instruct`, run a five-minute roleplay as "Dakkar, an aggressive Orc player in Warcraft 3" against a fake game state you describe in chat.
+Install Ollama, pull `llama3.1:8b`, run a five-minute roleplay as "Dakkar, an aggressive Orc player in Warcraft 3" against a fake game state you describe in chat.
 
 - If Dakkar feels in-character, contextual, and not dull → the thesis holds, proceed to M0.
 - If flat → try `qwen2.5:7b-instruct`. If both feel flat on this hardware → **stop.** No bridge engineering rescues a brain that isn't fun to talk to.
@@ -18,7 +18,7 @@ Install Ollama, pull `llama3.1:8b-instruct`, run a five-minute roleplay as "Dakk
 ## Milestones
 
 ### M0 — Repo + environment *(evening)*
-Create repo, MIT license. Scaffold layout: `/daemon`, `/map-mod`, `/personas`, `/docs`, `/scripts`. Install Ollama; pull `llama3.1:8b-instruct` and `qwen2.5:7b-instruct`; confirm both at `:11434`. Install whisper.cpp (`base.en`) and Piper; confirm transcription and synthesis.
+Create repo, MIT license. Scaffold layout: `/daemon`, `/map-mod`, `/personas`, `/docs`, `/scripts`. Install Ollama; pull `llama3.1:8b` and `qwen2.5:7b-instruct`; confirm both at `:11434`. Install whisper.cpp (`base.en`) and Piper; confirm transcription and synthesis.
 
 ### M1 — One persona, chat-only, no game *(week 1)*
 Build `Persona`/`Hub`. Write a `FakeState` emitter that replays scripted game events from a JSON file on a timer. Wire Ollama. Add the JSON output schema + validation. **Tune one persona until it feels alive and not annoying — highest-leverage, zero-cost work in the project. Spend real time here.**

@@ -55,19 +55,21 @@ Five components across the sandbox boundary:
 
 ## Status
 
-🚧 **M1/M2 — daemon core built.** The Companion Daemon runs the full persona loop **offline** (no Ollama required) against scripted game state — mention-routing, idle banter, AI↔AI damping, directives, and voice are all wired and tested. See [daemon/README.md](daemon/README.md) to run it: `cd daemon && python -m tavern --fake-llm`. See [roadmap.md](roadmap.md) for the build sequence and [progress.md](progress.md) for current state.
+🚧 **M1/M2 — environment installed, kill test passed.** The full toolchain is set up (Ollama + `llama3.1:8b` + `qwen2.5:7b-instruct`, Piper TTS, whisper.cpp STT) and the Companion Daemon runs the persona loop against the **real** model — in-character chat, valid JSON directives, and spoken lines all work. It also runs fully offline with `--fake-llm`. Reproduce the environment with [`scripts/setup.ps1`](scripts/setup.ps1); run the brain with `cd daemon && python -m tavern --persona Dakkar`. See [daemon/README.md](daemon/README.md), [roadmap.md](roadmap.md), and [progress.md](progress.md).
 
-The remaining M1/M2 work is **persona tuning**, which needs a real model — gated on the kill test below.
+The remaining M1/M2 work is **persona tuning** — making each AI feel alive and not annoying.
 
 The very first thing to do is the **kill test** (design §14): install Ollama, pull `llama3.1:8b-instruct`, and roleplay an aggressive Orc player named Dakkar against a fake game state. If it feels in-character and fun, the thesis holds and the rest is engineering. If it feels flat on this hardware, the project stops there.
 
-## Requirements (target)
+## Requirements
 
 - Warcraft 3 Reforged (LAN; this project disqualifies Battle.net by design)
-- A GPU with ≥8 GB VRAM for the 8B model (RTX 5060 or better), 16 GB RAM minimum / 32 GB comfortable
-- [Ollama](https://ollama.com/) with `llama3.1:8b-instruct` and `qwen2.5:7b-instruct`
+- A GPU with ≥8 GB VRAM for the 8B model, 16 GB RAM minimum / 32 GB comfortable
+- [Ollama](https://ollama.com/) with `llama3.1:8b` and `qwen2.5:7b-instruct`
 - `whisper.cpp` (`base.en`) and Piper for voice
 - Headsets (not room speakers) — required to avoid the TTS→mic feedback loop
+
+The LLM + voice toolchain is installed/reproduced by [`scripts/setup.ps1`](scripts/setup.ps1) (Ollama via winget, model pulls, Piper + whisper.cpp into `tools/`).
 
 ## License
 

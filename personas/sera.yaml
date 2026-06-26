@@ -3,7 +3,7 @@ player_id: 4
 race: Human
 team: ally          # ally | enemy
 temperament: calm, methodical, encouraging
-model: llama3.1:8b-instruct   # ally teammate → focus persona, 8B
+model: llama3.1:8b   # ally teammate → focus persona, 8B
 voice: en_US-calm
 idle_banter_seconds: 40       # talks less often than Dakkar
 
