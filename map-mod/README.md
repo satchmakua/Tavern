@@ -1,0 +1,13 @@
+# /map-mod — Tavern Bridge + AMAI fork (TypeScript → Lua)
+
+Game-side, inside a modified melee map. See [design §5](../tavern-design.md), [§6](../tavern-design.md), and [§8](../tavern-design.md).
+
+Built with [`cipherxof/wc3-ts-template`](https://github.com/cipherxof/wc3-ts-template) (TypeScript-to-Lua, type-checked). Base map: `(4)Lost Temple` opened in the Reforged World Editor, with [AMAI](https://github.com/SMUnlimited/AMAI) installed.
+
+**Tavern Bridge** reads the daemon's directive file (via [`war3_lua`](https://github.com/Ev3nt/war3_lua) file I/O), applies strategy changes to AMAI, renders persona chat with `BlzDisplayChatMessage`, and exfiltrates a compact state snapshot + new human chat back to the daemon.
+
+**Critical — determinism (§6):** only the host reads the directive file. It must **not** apply changes directly. It calls `BlzSendSyncData`; every client catches the `SyncData` trigger and applies the *identical* mutation on the same simulation frame. Never branch synchronous game state on a local async read (the `GetLocalPlayer()` trap). Build the synced path from day one — never ship the un-synced version, even as a test.
+
+**AMAI fork** — `commander_remote.lua` (~200 lines) exposes `setStrategy`/`setAggression`/`setTechBias`, each flipping an existing AMAI global its decision loop already reads.
+
+_Empty — populated starting at M4._

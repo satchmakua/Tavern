@@ -2,8 +2,8 @@
 
 Living status log. Update as milestones move. See [roadmap.md](roadmap.md) for the full plan.
 
-**Current phase:** 🚧 Pre-M0 — scaffolding
-**Last updated:** 2026-06-25
+**Current phase:** 🚧 M0 — repo + environment
+**Last updated:** 2026-06-26
 
 ---
 
@@ -12,7 +12,7 @@ Living status log. Update as milestones move. See [roadmap.md](roadmap.md) for t
 | Milestone | Status | Notes |
 |---|---|---|
 | Kill test | ⬜ Not started | Roleplay Dakkar vs fake state before any code |
-| M0 — Repo + environment | 🚧 In progress | Scaffolding docs created; toolchain not yet installed |
+| M0 — Repo + environment | 🚧 In progress | Repo skeleton + LICENSE + .gitignore done; toolchain not yet installed |
 | M1 — One persona, chat-only | ⬜ Not started | |
 | M2 — Multiple personas | ⬜ Not started | |
 | M3 — Voice in/out | ⬜ Not started | |
@@ -30,10 +30,11 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done · ⛔ blocked
 
 - **2026-06-25** — Design document v2 committed (`tavern-design.md`).
 - **2026-06-25** — Project docs scaffolded: `readme.md`, `roadmap.md`, `progress.md`.
+- **2026-06-26** — Repo skeleton scaffolded: `/daemon`, `/map-mod`, `/personas`, `/docs`, `/scripts` (each with a README), MIT `LICENSE`, `.gitignore`, and example persona `personas/dakkar.yaml`.
 
 ## In progress
 
-- **M0** — repo + environment. Remaining: scaffold directory layout (`/daemon`, `/map-mod`, `/personas`, `/docs`, `/scripts`), add MIT `LICENSE`, install Ollama + pull models, install whisper.cpp + Piper.
+- **M0** — repo + environment. Remaining: install Ollama + pull `llama3.1:8b-instruct` and `qwen2.5:7b-instruct` (confirm at `:11434`), install whisper.cpp (`base.en`) + Piper.
 
 ## Next up
 
