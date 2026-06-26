@@ -55,7 +55,9 @@ Five components across the sandbox boundary:
 
 ## Status
 
-🚧 **Pre-M0 — scaffolding.** No code yet. See [roadmap.md](roadmap.md) for the build sequence and [progress.md](progress.md) for current state.
+🚧 **M1/M2 — daemon core built.** The Companion Daemon runs the full persona loop **offline** (no Ollama required) against scripted game state — mention-routing, idle banter, AI↔AI damping, directives, and voice are all wired and tested. See [daemon/README.md](daemon/README.md) to run it: `cd daemon && python -m tavern --fake-llm`. See [roadmap.md](roadmap.md) for the build sequence and [progress.md](progress.md) for current state.
+
+The remaining M1/M2 work is **persona tuning**, which needs a real model — gated on the kill test below.
 
 The very first thing to do is the **kill test** (design §14): install Ollama, pull `llama3.1:8b-instruct`, and roleplay an aggressive Orc player named Dakkar against a fake game state. If it feels in-character and fun, the thesis holds and the rest is engineering. If it feels flat on this hardware, the project stops there.
 

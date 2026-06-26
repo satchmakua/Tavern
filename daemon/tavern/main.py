@@ -229,6 +229,11 @@ def cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-color", action="store_true", help="disable ANSI colors")
     args = parser.parse_args(argv)
 
+    try:  # so em dashes / emoji don't choke a cp1252 console
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
     if args.scenario and args.scenario.lower() == "none":
         args.scenario = None
 
