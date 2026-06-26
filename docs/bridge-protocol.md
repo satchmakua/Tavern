@@ -1,15 +1,20 @@
 # Bridge protocol — daemon ⇄ WC3 map
 
-The daemon and the map talk through two JSON files in a shared **bridge directory**
-(`war3_lua` gives the map the file I/O; design §5). Both sides **write atomically**
-(temp file + rename) so the reader never sees a half-written file.
+The daemon and the map talk through two JSON files in a shared **bridge directory**.
+On **Reforged** the map's file I/O comes from the Preload-based **FileIO** library
+(`FileIO.Save`/`FileIO.Load`), not `war3_lua` (which is classic-only). The bridge
+directory is `Documents\Warcraft III\CustomMapData\Tavern\`. The daemon writes
+atomically (temp file + rename) so the map never reads a half-written file.
 
 Run the daemon against a bridge dir:
 
 ```bash
-python -m tavern --bridge C:\path\to\bridge        # real model, runs until Ctrl-C
+# real game (Reforged): point at the map's CustomMapData folder
+python -m tavern --bridge "%USERPROFILE%\Documents\Warcraft III\CustomMapData\Tavern"
 python -m tavern --bridge ./bridge --fake-llm      # offline, for Stage A testing
 ```
+
+See [in-game-setup.md](in-game-setup.md) for installing the game side.
 
 Daemon side: `daemon/tavern/bridge.py` (`StateFileWatcher`, `DirectiveWriter`).
 
