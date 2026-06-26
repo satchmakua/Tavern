@@ -2,7 +2,7 @@
 
 One file per AI player. See [design §4](../tavern-design.md).
 
-Each persona is a short system prompt — name, race lean, temperament, constraints — plus runtime metadata (team, model tier, Piper voice). **Keep prompts short:** they leak into every response and burn context. Target 6–12 personas mixing races and tempers (3 allied + 4 enemy for a 4v4).
+Each persona is a short system prompt — name, race lean, temperament, constraints — plus runtime metadata (team, model tier, Piper voice). **Keep prompts short:** they leak into every response and burn context. Target 6–12 personas mixing races and tempers; assign them to teams to fill whatever lobby you're playing (team game or FFA).
 
 Model tiering (§7): focus personas (your teammates, the opponent you're fighting) run the 8B; noisier enemy banter runs a 4B.
 

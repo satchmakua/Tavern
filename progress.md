@@ -31,10 +31,11 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done · ⛔ blocked
 - **2026-06-25** — Design document v2 committed (`tavern-design.md`).
 - **2026-06-25** — Project docs scaffolded: `readme.md`, `roadmap.md`, `progress.md`.
 - **2026-06-26** — Repo skeleton scaffolded: `/daemon`, `/map-mod`, `/personas`, `/docs`, `/scripts` (each with a README), MIT `LICENSE`, `.gitignore`, and example persona `personas/dakkar.yaml`.
+- **2026-06-26** — Added `scripts/setup.ps1`: pulls the Ollama models and verifies `:11434`.
 
 ## In progress
 
-- **M0** — repo + environment. Remaining: install Ollama + pull `llama3.1:8b-instruct` and `qwen2.5:7b-instruct` (confirm at `:11434`), install whisper.cpp (`base.en`) + Piper.
+- **M0** — repo + environment. Remaining: run `scripts/setup.ps1` to pull `llama3.1:8b-instruct` and `qwen2.5:7b-instruct`; install whisper.cpp (`base.en`) + Piper.
 
 ## Next up
 

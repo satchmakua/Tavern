@@ -1,0 +1,60 @@
+{
+  "map": "(4) Lost Temple",
+  "note": "Generic scripted skirmish for tuning personas with the game closed. 'you' is the local human player (slot 1). Rename/extend freely.",
+  "timeline": [
+    {
+      "at": 2,
+      "state": {
+        "game_time": "00:30",
+        "map": "(4) Lost Temple",
+        "players": {
+          "1": {"name": "you", "race": "Human", "team": "ally", "gold": 410, "lumber": 120, "food": "8/12", "army": ["4 footmen"], "heroes": []},
+          "3": {"name": "Dakkar", "race": "Orc", "team": "ally", "gold": 350, "lumber": 90, "food": "6/10", "army": ["3 grunts"], "heroes": ["Blademaster L1"]},
+          "4": {"name": "Sera", "race": "Human", "team": "ally", "gold": 500, "lumber": 200, "food": "5/10", "army": ["2 footmen"], "heroes": ["Archmage L1"]},
+          "5": {"name": "Vex", "race": "Undead", "team": "enemy", "gold": 300, "lumber": 80, "food": "7/10", "army": ["4 ghouls"], "heroes": ["Death Knight L1"]},
+          "6": {"name": "Grollum", "race": "Night Elf", "team": "enemy", "gold": 420, "lumber": 140, "food": "6/10", "army": ["3 archers"], "heroes": ["Keeper L1"]}
+        },
+        "events": ["game just started, everyone scouting"]
+      }
+    },
+    {
+      "at": 4,
+      "chat": [{"speaker": "you", "text": "dakkar push their natural with me", "kind": "human"}]
+    },
+    {
+      "at": 9,
+      "event": {"text": "Dakkar's Blademaster reached level 2", "wake": ["Dakkar"]}
+    },
+    {
+      "at": 14,
+      "state": {
+        "game_time": "03:10",
+        "map": "(4) Lost Temple",
+        "players": {
+          "1": {"name": "you", "race": "Human", "team": "ally", "gold": 600, "lumber": 240, "food": "16/22", "army": ["8 footmen", "2 riflemen"], "heroes": ["Paladin L2"]},
+          "3": {"name": "Dakkar", "race": "Orc", "team": "ally", "gold": 220, "lumber": 110, "food": "14/20", "army": ["6 grunts", "2 raiders"], "heroes": ["Blademaster L2"]},
+          "4": {"name": "Sera", "race": "Human", "team": "ally", "gold": 900, "lumber": 350, "food": "12/20", "army": ["4 footmen"], "heroes": ["Archmage L2"]},
+          "5": {"name": "Vex", "race": "Undead", "team": "enemy", "gold": 250, "lumber": 130, "food": "18/24", "army": ["8 ghouls", "3 fiends"], "heroes": ["Death Knight L3"]},
+          "6": {"name": "Grollum", "race": "Night Elf", "team": "enemy", "gold": 500, "lumber": 180, "food": "10/16", "army": ["5 archers"], "heroes": ["Keeper L2"]}
+        },
+        "events": ["enemy expanding at the eastern gold mine"]
+      }
+    },
+    {
+      "at": 16,
+      "chat": [{"speaker": "you", "text": "sera can you expand behind us?", "kind": "human"}]
+    },
+    {
+      "at": 22,
+      "event": {"text": "a hero died in a fight near the center", "broadcast": true}
+    },
+    {
+      "at": 30,
+      "chat": [{"speaker": "you", "text": "vex that expo is wide open, you're done", "kind": "human"}]
+    },
+    {
+      "at": 36,
+      "event": {"text": "Vex lost their forward Halls of the Dead", "broadcast": true}
+    }
+  ]
+}

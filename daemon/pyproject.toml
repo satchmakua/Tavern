@@ -1,0 +1,30 @@
+[project]
+name = "tavern-daemon"
+version = "0.1.0"
+description = "Companion Daemon for Tavern — AI companions for Warcraft 3"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+tavern = "tavern.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["tavern*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
