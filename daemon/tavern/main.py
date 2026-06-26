@@ -1,0 +1,253 @@
+"""Entry point: wire personas + Hub + LLM + FakeState into a running daemon.
+
+M1 scope: chat-only, no game. The FakeState emitter feeds scripted state and
+chat; persona loops decide what to say; everything renders to the console. Run
+with --fake-llm to exercise the whole pipeline with no Ollama installed.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import contextlib
+import random
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+from .config import Config
+from .fakestate import FakeStateEmitter
+from .hub import Hub
+from .llm import FakeLLM, LLM, LLMError, OllamaClient
+from .persona import Persona, load_personas
+from .schema import Directive, OutputParseError, parse_output
+from .summarizer import build_user_prompt, summarize
+
+HERE = Path(__file__).resolve().parent
+DEFAULT_SCENARIO = HERE.parent / "scenarios" / "skirmish.json"
+
+
+# --------------------------------------------------------------------------- #
+# console rendering
+# --------------------------------------------------------------------------- #
+class _Color:
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def _w(self, code: str, s: str) -> str:
+        return f"\033[{code}m{s}\033[0m" if self.enabled else s
+
+    def ally(self, s: str) -> str:   return self._w("32", s)
+    def enemy(self, s: str) -> str:  return self._w("31", s)
+    def human(self, s: str) -> str:  return self._w("36;1", s)
+    def dim(self, s: str) -> str:    return self._w("2", s)
+    def warn(self, s: str) -> str:   return self._w("33", s)
+
+
+def _enable_windows_vt() -> bool:
+    """Best-effort enable ANSI escapes on Windows; return True if color is usable."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        return True
+    except Exception:
+        return False
+
+
+def _ts() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+class Renderer:
+    def __init__(self, color: _Color) -> None:
+        self.c = color
+
+    def chat(self, persona: Persona, text: str) -> None:
+        tag = self.c.ally(persona.name) if persona.is_ally else self.c.enemy(persona.name)
+        print(f"{self.c.dim(_ts())} {tag}: {text}")
+
+    def human(self, speaker: str, text: str) -> None:
+        print(f"{self.c.dim(_ts())} {self.c.human(speaker)}: {text}")
+
+    def event(self, text: str) -> None:
+        print(f"{self.c.dim(_ts())} {self.c.dim('* ' + text)}")
+
+    def directive(self, persona: Persona, d: Directive) -> None:
+        bits = []
+        if d.strategy:
+            bits.append(f"strategy={d.strategy}")
+        if d.aggression is not None:
+            bits.append(f"aggression={d.aggression}")
+        if d.target_player:
+            bits.append(f"target={d.target_player}")
+        print(self.c.dim(f"           » {persona.name} directive: {', '.join(bits)}"))
+
+    def voice(self, persona: Persona, text: str) -> None:
+        print(f"{self.c.dim(_ts())} 🔊 {persona.name} (voice): {text}")
+
+    def warn(self, text: str) -> None:
+        print(self.c.warn(f"           ! {text}"))
+
+
+# --------------------------------------------------------------------------- #
+# coroutines
+# --------------------------------------------------------------------------- #
+async def persona_loop(persona: Persona, hub: Hub, llm: LLM, config: Config, render: Renderer) -> None:
+    while True:
+        await persona.wake.wait()
+        priority = persona.consume_wake()
+        now = time.monotonic()
+        if not priority and (now - persona.last_chat_ts) < config.chat_min_interval:
+            continue  # idle throttle: stay quiet, we spoke recently
+
+        model = persona.model or config.default_model
+        summary = summarize(hub.latest_state, persona.player_id)
+        user = build_user_prompt(summary, hub.recent_chat())
+        try:
+            raw = await llm.complete(model=model, system=persona.system_prompt, user=user)
+            out = parse_output(raw)
+        except (LLMError, OutputParseError) as e:
+            render.warn(f"{persona.name}: {e}")
+            continue
+
+        if out.say_in_chat:
+            persona.last_chat_ts = time.monotonic()
+            # rendering happens via hub.on_line so order matches other lines
+            hub.post_chat(persona.name, out.say_in_chat, kind="ai", source=persona)
+        if out.say_aloud:
+            await hub.voice_out.put((persona, out.say_aloud))
+        if out.directive:
+            hub.record_directive(persona, out.directive)
+            render.directive(persona, out.directive)
+
+
+async def idle_timer(persona: Persona, config: Config) -> None:
+    base = persona.idle_banter_seconds or config.idle_banter_seconds
+    while True:
+        wait = base + random.uniform(-config.idle_banter_jitter, config.idle_banter_jitter)
+        await asyncio.sleep(max(2.0, wait))
+        persona.trigger(priority=False)
+
+
+async def voice_consumer(hub: Hub, render: Renderer) -> None:
+    """One persona speaks aloud at a time (design §3)."""
+    while True:
+        persona, text = await hub.voice_out.get()
+        render.voice(persona, text)
+        await asyncio.sleep(min(4.0, 1.0 + len(text) * 0.04))  # simulate speaking time
+        hub.voice_out.task_done()
+
+
+async def chat_mirror(hub: Hub, render: Renderer) -> None:
+    """Render human + event lines injected by the emitter (AI lines render in-loop)."""
+    seen = 0
+    while True:
+        lines = list(hub.chat)
+        for line in lines[seen:]:
+            if line.kind == "human":
+                render.human(line.speaker, line.text)
+            elif line.kind == "system":
+                render.event(line.text)
+        seen = len(lines)
+        await asyncio.sleep(0.1)
+
+
+# --------------------------------------------------------------------------- #
+# orchestration
+# --------------------------------------------------------------------------- #
+async def run(config: Config, args: argparse.Namespace) -> int:
+    color = _Color(enabled=(not args.no_color) and _enable_windows_vt())
+    render = Renderer(color)
+
+    personas = load_personas(config.personas_dir)
+    if args.persona:
+        wanted = {n.lower() for n in args.persona}
+        personas = [p for p in personas if p.name.lower() in wanted]
+    if not personas:
+        print(color.warn(f"No personas found in {config.personas_dir}"), file=sys.stderr)
+        return 1
+
+    hub = Hub(config, rng=random.Random(args.seed))
+    hub.register(personas)
+
+    llm: LLM = FakeLLM(seed=args.seed) if args.fake_llm else OllamaClient(
+        config.ollama_host, config.request_timeout, config.temperature
+    )
+
+    print(color.dim(
+        f"Tavern daemon — {len(personas)} persona(s): "
+        + ", ".join(p.name for p in personas)
+        + (f"  [fake-llm]" if args.fake_llm else f"  [ollama {config.ollama_host}]")
+    ))
+
+    tasks: list[asyncio.Task] = []
+    tasks.append(asyncio.create_task(chat_mirror(hub, render)))
+    tasks.append(asyncio.create_task(voice_consumer(hub, render)))
+    for p in personas:
+        tasks.append(asyncio.create_task(persona_loop(p, hub, llm, config, render)))
+        tasks.append(asyncio.create_task(idle_timer(p, config)))
+
+    emitter: FakeStateEmitter | None = None
+    duration = float(args.duration) if args.duration else 60.0
+    if args.scenario:
+        scenario_path = Path(args.scenario)
+        if not scenario_path.exists():
+            print(color.warn(f"Scenario not found: {scenario_path}"), file=sys.stderr)
+            return 1
+        emitter = FakeStateEmitter(hub, scenario_path, speed=args.speed)
+        if not args.duration:
+            duration = emitter.duration + 8.0  # tail so late reactions render
+        tasks.append(asyncio.create_task(emitter.run()))
+
+    try:
+        await asyncio.sleep(duration)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    finally:
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await llm.aclose()
+
+    print(color.dim(f"\n--- session over: {len(hub.directives)} directive(s) issued ---"))
+    return 0
+
+
+def cli(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="tavern", description="Tavern Companion Daemon (M1: chat-only)")
+    parser.add_argument("--fake-llm", action="store_true", help="run offline with a canned LLM (no Ollama)")
+    parser.add_argument("--scenario", default=str(DEFAULT_SCENARIO), help="FakeState scenario JSON (or 'none')")
+    parser.add_argument("--persona", action="append", help="limit to persona by name (repeatable)")
+    parser.add_argument("--duration", type=float, default=None, help="run for N seconds (default: scenario length + tail)")
+    parser.add_argument("--speed", type=float, default=1.0, help="scenario playback speed multiplier")
+    parser.add_argument("--model", default=None, help="override default Ollama model")
+    parser.add_argument("--host", default=None, help="override Ollama host URL")
+    parser.add_argument("--seed", type=int, default=None, help="RNG seed (deterministic banter/arbiter)")
+    parser.add_argument("--no-color", action="store_true", help="disable ANSI colors")
+    args = parser.parse_args(argv)
+
+    if args.scenario and args.scenario.lower() == "none":
+        args.scenario = None
+
+    config = Config()
+    if args.model:
+        config.default_model = args.model
+    if args.host:
+        config.ollama_host = args.host
+
+    try:
+        return asyncio.run(run(config, args))
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())
