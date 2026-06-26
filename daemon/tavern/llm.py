@@ -19,13 +19,15 @@ class LLMError(RuntimeError):
 
 class LLM(Protocol):
     async def complete(self, *, model: str, system: str, user: str) -> str: ...
+    async def warmup(self, *, model: str) -> None: ...
     async def aclose(self) -> None: ...
 
 
 class OllamaClient:
-    def __init__(self, host: str, timeout: float, temperature: float = 0.8) -> None:
+    def __init__(self, host: str, timeout: float, temperature: float = 0.8, keep_alive: str = "30m") -> None:
         self._client = httpx.AsyncClient(base_url=host.rstrip("/"), timeout=timeout)
         self._temperature = temperature
+        self._keep_alive = keep_alive
 
     async def complete(self, *, model: str, system: str, user: str) -> str:
         payload = {
@@ -36,6 +38,7 @@ class OllamaClient:
             ],
             "format": "json",
             "stream": False,
+            "keep_alive": self._keep_alive,
             "options": {"temperature": self._temperature},
         }
         try:
@@ -46,6 +49,18 @@ class OllamaClient:
         except httpx.HTTPError as e:
             raise LLMError(f"could not reach Ollama at {self._client.base_url}: {e}") from e
         return resp.json()["message"]["content"]
+
+    async def warmup(self, *, model: str) -> None:
+        """Load a model into VRAM ahead of time so the first real turn isn't cold."""
+        try:
+            resp = await self._client.post(
+                "/api/generate", json={"model": model, "keep_alive": self._keep_alive}
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise LLMError(f"Ollama returned {e.response.status_code}: {e.response.text[:200]}") from e
+        except httpx.HTTPError as e:
+            raise LLMError(f"could not reach Ollama at {self._client.base_url}: {e}") from e
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -84,6 +99,9 @@ class FakeLLM:
         if self._rng.random() < 0.1:
             out["say_aloud"] = "let's go!"
         return json.dumps(out)
+
+    async def warmup(self, *, model: str) -> None:
+        return None
 
     async def aclose(self) -> None:
         return None

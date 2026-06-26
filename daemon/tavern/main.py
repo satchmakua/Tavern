@@ -175,7 +175,7 @@ async def run(config: Config, args: argparse.Namespace) -> int:
     hub.on_line = on_line
 
     llm: LLM = FakeLLM(seed=args.seed) if args.fake_llm else OllamaClient(
-        config.ollama_host, config.request_timeout, config.temperature
+        config.ollama_host, config.request_timeout, config.temperature, config.keep_alive
     )
 
     print(color.dim(
@@ -183,6 +183,16 @@ async def run(config: Config, args: argparse.Namespace) -> int:
         + ", ".join(p.name for p in personas)
         + (f"  [fake-llm]" if args.fake_llm else f"  [ollama {config.ollama_host}]")
     ))
+
+    # Warm each distinct model into VRAM before any persona is asked to speak,
+    # so the first real turn isn't a multi-second cold load (design §7 latency).
+    if not args.fake_llm:
+        for model in sorted({p.model or config.default_model for p in personas}):
+            print(color.dim(f"  warming {model} …"))
+            try:
+                await llm.warmup(model=model)
+            except LLMError as e:
+                render.warn(f"warmup {model}: {e}")
 
     tasks: list[asyncio.Task] = []
     tasks.append(asyncio.create_task(voice_consumer(hub, render)))

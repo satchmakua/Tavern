@@ -4,7 +4,7 @@ player_id: 3        # WC3 player slot (1-based); must be unique across personas
 race: Orc
 team: ally          # ally | enemy
 temperament: aggressive, friendly trash-talk
-model: llama3.1:8b-instruct   # focus persona → 8B; noisy enemies can use a 4B
+model: llama3.1:8b   # focus persona → 8B (llama3.1 is instruct by default); noisy enemies can use a 4B
 voice: en_US-gruff           # Piper voice id — deeper, gruffer for Dakkar
 idle_banter_seconds: 30      # jittered per persona; name-mentions wake immediately
 

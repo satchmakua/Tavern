@@ -20,6 +20,9 @@ dist/
 *.wav
 models/
 
+# Local tool binaries (Piper, whisper.cpp) — fetched per-machine
+tools/
+
 # Bridge runtime files (regenerated each game)
 *.directive.json
 *.state.json
