@@ -4,7 +4,7 @@ Game-side, inside a modified melee map. See [design §5](../tavern-design.md), [
 
 Built with [`cipherxof/wc3-ts-template`](https://github.com/cipherxof/wc3-ts-template) (TypeScript-to-Lua, type-checked). Base map: `(4)Lost Temple` opened in the Reforged World Editor, with [AMAI](https://github.com/SMUnlimited/AMAI) installed.
 
-**Tavern Bridge** reads the daemon's directive file (via [`war3_lua`](https://github.com/Ev3nt/war3_lua) file I/O), applies strategy changes to AMAI, renders persona chat with `BlzDisplayChatMessage`, and exfiltrates a compact state snapshot + new human chat back to the daemon.
+**Tavern Bridge** reads the daemon's directive file and writes the state snapshot via the Preload-based **FileIO** library (`FileIO.Save`/`FileIO.Load`, files in `Documents\Warcraft III\CustomMapData\Tavern\`), applies strategy changes to AMAI, and renders persona chat with `BlzDisplayChatMessage`. **Note:** the design's `war3_lua` is classic-WC3-only (1.24–1.28) and is **not** used on Reforged — FileIO replaces it. See [docs/in-game-setup.md](../docs/in-game-setup.md).
 
 **Critical — determinism (§6):** only the host reads the directive file. It must **not** apply changes directly. It calls `BlzSendSyncData`; every client catches the `SyncData` trigger and applies the *identical* mutation on the same simulation frame. Never branch synchronous game state on a local async read (the `GetLocalPlayer()` trap). Build the synced path from day one — never ship the un-synced version, even as a test.
 

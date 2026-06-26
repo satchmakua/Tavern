@@ -51,7 +51,7 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done · ⛔ blocked
 
 ## Next up
 
-1. **User prereqs for in-game test**: install/confirm Reforged + World Editor, install `war3_lua`, ready AMAI + `(4)Lost Temple`. Then **M4** (I scaffold wc3-ts-template; user runs the WE steps).
+1. **User prereqs for in-game test** — follow [docs/in-game-setup.md](docs/in-game-setup.md): locate Reforged paths, enable Local Files, prove AMAI works on a Lost Temple copy, report paths back. (No `war3_lua`; FileIO instead.) Then **M4** (I scaffold wc3-ts-template).
 2. **M5 map half**: state-export + directive-reader in the map (synced via `BlzSendSyncData` from the start). Then **M6** AMAI fork (`commander_remote.lua`).
 3. **M3 voice polish** (later): distinct voice per persona (download more Piper voices), and a real-mic test of push-to-talk end-to-end.
 
@@ -61,4 +61,5 @@ Legend: ⬜ not started · 🚧 in progress · ✅ done · ⛔ blocked
 
 ## Decisions log
 
-- **2026-06-25** — Following design v2: `war3_lua` is the backbone bridge (not optional); AI speech renders via `BlzDisplayChatMessage` through `BlzSendSyncData` (never injected as chat); LAN-only (Battle.net disqualified); MIT license.
+- **2026-06-25** — Following design v2: AI speech renders via `BlzDisplayChatMessage` through `BlzSendSyncData` (never injected as chat); LAN-only; MIT license.
+- **2026-06-26** — **Bridge tooling correction:** the design's `war3_lua` only supports **classic** WC3 (1.24–1.28), not Reforged. Target is Reforged, so the file bridge uses the Preload-based **FileIO** library (`Documents\Warcraft III\CustomMapData\`) — **no DLL mod**. Removes the "Battle.net disqualified by a DLL" framing (FileIO needs Local Files enabled, not a binary mod). Open risk: repeated mid-game reads on Reforged (validate in M5a). See [docs/in-game-setup.md](docs/in-game-setup.md).

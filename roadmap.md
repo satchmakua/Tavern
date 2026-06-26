@@ -34,8 +34,8 @@ Voice Frontend: push-to-talk (`pynput`), per-device speaker tagging, `say_aloud`
 ### M4 — Map + AMAI baseline *(week 4)*
 Copy `(4)Lost Temple`, install AMAI, confirm vanilla AMAI plays. Stand up `wc3-ts-template`; get a "hello world" trigger compiling to Lua and running. (~a day on its own; AMAI's installer has quirks.)
 
-### M5 — `war3_lua` file bridge, one direction at a time *(weeks 5–6)*
-Install `war3_lua`. First **Game → Daemon**: map writes state file, daemon watches it — confirm chat and resources appear in daemon logs. Then **Daemon → Game**: daemon writes directive file, map reads it. Render a test persona line via `BlzDisplayChatMessage` — **routed through `BlzSendSyncData` from the start** so the un-synced version is never built.
+### M5 — file bridge, one direction at a time *(weeks 5–6)*
+**Reforged uses the Preload-based FileIO library, not `war3_lua`** (which is classic-only, 1.24–1.28). Files live in `Documents\Warcraft III\CustomMapData\`. First **Game → Daemon**: map `FileIO.Save`s the state snapshot, daemon's `StateFileWatcher` reads it (✅ daemon half built). Then **Daemon → Game**: daemon writes the directive file (✅ `DirectiveWriter`), map `FileIO.Load`s it. Render a test persona line via `BlzDisplayChatMessage` — **routed through `BlzSendSyncData` from the start** so the un-synced version is never built. Key risk to validate: repeated *mid-game* reads on Reforged.
 
 ### M6 — Sync hardening + AMAI hooks *(week 7)*
 Implement the full §6 pattern: host reads file → `BlzSendSyncData` → all clients apply identically. Test 1v1 vs one Companion across two LAN machines, confirm **no desync**. Fork AMAI, add `commander_remote.lua`, wire `applyDirective`. Confirm directives visibly change AMAI behavior; bump magnitudes if too subtle.
@@ -105,4 +105,4 @@ Scope creep is *certain*; park it here rather than letting it derail v1.
 | Desync from un-synced state mutation | HIGH if §6 ignored | Build the synced path from M5; never ship un-synced, even as a test |
 | LLM latency makes chat feel laggy | HIGH on first build | Gating + priority queue + tiered models + canned-line masking; second machine |
 | Audio feedback loop | HIGH without headsets | Push-to-talk + headsets, never room speakers |
-| Reforged patch breaks `war3_lua` | MODERATE | Pin a known-good Reforged build; `Preload` exploit as no-DLL read fallback |
+| Reforged FileIO mid-game *reads* unreliable | MODERATE | Preload-based reads historically happen at load; validate repeated reads in M5a; fallbacks = Preloader re-reads or AMAI chat-command channel. (`war3_lua` is classic-only, so it's not an option on Reforged.) |
