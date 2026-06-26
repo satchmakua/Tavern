@@ -19,9 +19,12 @@ from .config import Config
 from .fakestate import FakeStateEmitter
 from .hub import Hub
 from .llm import FakeLLM, LLM, LLMError, OllamaClient
+from .directives import normalize_intent
+from .knowledge import ground
 from .persona import Persona, load_personas
 from .schema import Directive, OutputParseError, parse_output
-from .summarizer import build_user_prompt, summarize
+from .strategy import GamePlan, Strategist
+from .summarizer import build_user_prompt, summarize, summarize_outcome, summarize_team
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_SCENARIO = HERE.parent / "scenarios" / "skirmish.json"
@@ -93,6 +96,12 @@ class Renderer:
     def voice(self, persona: Persona, text: str) -> None:
         print(f"{self.c.dim(_ts())} 🔊 {persona.name} (voice): {text}")
 
+    def plan(self, team: str, is_ally: bool, gp: GamePlan) -> None:
+        tag = self.c.ally(team) if is_ally else self.c.enemy(team)
+        print(f"{self.c.dim(_ts())} ◆ [{tag} plan] {gp.headline()}")
+        if gp.rationale:
+            print(self.c.dim(f"             ↳ {gp.rationale}"))
+
     def warn(self, text: str) -> None:
         print(self.c.warn(f"           ! {text}"))
 
@@ -110,7 +119,9 @@ async def persona_loop(persona: Persona, hub: Hub, llm: LLM, config: Config, ren
 
         model = persona.model or config.default_model
         summary = summarize(hub.latest_state, persona.player_id)
-        user = build_user_prompt(summary, hub.recent_chat())
+        plan = hub.plan_for(persona.team)
+        plan_block = plan.as_prompt_block() if plan else None
+        user = build_user_prompt(summary, hub.recent_chat(), team_plan=plan_block)
         try:
             raw = await llm.complete(model=model, system=persona.system_prompt, user=user)
             out = parse_output(raw)
@@ -125,8 +136,42 @@ async def persona_loop(persona: Persona, hub: Hub, llm: LLM, config: Config, ren
         if out.say_aloud:
             await hub.voice_out.put((persona, out.say_aloud))
         if out.directive:
+            # S2: normalize the persona's free-form intent to the controlled vocabulary.
+            players = [p.get("name") for p in hub.latest_state.get("players", {}).values() if p.get("name")]
+            canon, tgt = normalize_intent(out.directive.strategy, players)
+            if canon:
+                out.directive.strategy = canon
+                # a target only makes sense for attack intents
+                if tgt and canon.startswith("attack") and not out.directive.target_player:
+                    out.directive.target_player = tgt
             hub.record_directive(persona, out.directive)
             render.directive(persona, out.directive)
+
+
+async def strategist_loop(
+    strategist: Strategist, hub: Hub, config: Config, render: Renderer, is_ally: bool
+) -> None:
+    """Deliberate per-team planner (Strategy track S1): slow cadence, fuller state."""
+    # First plan shortly after start (once some state exists), then on cadence.
+    await asyncio.sleep(2.0)
+    prev_state: dict | None = None
+    while True:
+        state = hub.latest_state
+        summary = summarize_team(state, strategist.team)
+        grounding = ground(state, strategist.team)                       # S2: RTS knowledge
+        outcome = summarize_outcome(prev_state, state, strategist.team)  # S2: feedback
+        try:
+            plan = await strategist.propose(summary, hub.recent_chat(limit=12), outcome, grounding)
+        except (LLMError, OutputParseError) as e:
+            render.warn(f"strategist[{strategist.team}]: {e}")
+        else:
+            hub.set_plan(strategist.team, plan)
+            render.plan(strategist.team, is_ally, plan)
+            prev_state = state  # snapshot to diff against next round
+        wait = config.strategist_interval + random.uniform(
+            -config.strategist_jitter, config.strategist_jitter
+        )
+        await asyncio.sleep(max(5.0, wait))
 
 
 async def idle_timer(persona: Persona, config: Config) -> None:
@@ -184,10 +229,17 @@ async def run(config: Config, args: argparse.Namespace) -> int:
         + (f"  [fake-llm]" if args.fake_llm else f"  [ollama {config.ollama_host}]")
     ))
 
-    # Warm each distinct model into VRAM before any persona is asked to speak,
+    # One Strategist per distinct team (Strategy track S1).
+    strat_model = config.strategist_model or config.default_model
+    teams = sorted({p.team for p in personas})
+    strategists = {team: Strategist(team, llm, strat_model) for team in teams}
+    ally_teams = {p.team for p in personas if p.is_ally}
+
+    # Warm each distinct model into VRAM before anyone is asked to think,
     # so the first real turn isn't a multi-second cold load (design §7 latency).
     if not args.fake_llm:
-        for model in sorted({p.model or config.default_model for p in personas}):
+        models = {p.model or config.default_model for p in personas} | {strat_model}
+        for model in sorted(models):
             print(color.dim(f"  warming {model} …"))
             try:
                 await llm.warmup(model=model)
@@ -196,6 +248,10 @@ async def run(config: Config, args: argparse.Namespace) -> int:
 
     tasks: list[asyncio.Task] = []
     tasks.append(asyncio.create_task(voice_consumer(hub, render)))
+    for team, strategist in strategists.items():
+        tasks.append(asyncio.create_task(
+            strategist_loop(strategist, hub, config, render, is_ally=(team in ally_teams))
+        ))
     for p in personas:
         tasks.append(asyncio.create_task(persona_loop(p, hub, llm, config, render)))
         tasks.append(asyncio.create_task(idle_timer(p, config)))

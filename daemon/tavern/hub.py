@@ -53,6 +53,7 @@ class Hub:
         self.chat: deque[ChatLine] = deque(maxlen=config.chat_history_limit)
         self.latest_state: dict[str, Any] = {}
         self.directives: list[DirectiveRecord] = []
+        self.team_plans: dict[str, Any] = {}  # team -> GamePlan (Strategy track S1)
         self.voice_out: asyncio.Queue[tuple[Persona, str]] = asyncio.Queue()
         self._rng = rng or random.Random()
         # Optional render hook, invoked the moment a line is posted so console
@@ -72,6 +73,13 @@ class Hub:
     # --- state ---
     def set_state(self, state: dict[str, Any]) -> None:
         self.latest_state = state
+
+    # --- team plans (Strategy track S1) ---
+    def set_plan(self, team: str, plan: Any) -> None:
+        self.team_plans[team] = plan
+
+    def plan_for(self, team: str) -> Any | None:
+        return self.team_plans.get(team)
 
     # --- writes / routing ---
     def post_chat(self, speaker: str, text: str, kind: SpeakerKind, *, source: Optional[Persona] = None) -> None:

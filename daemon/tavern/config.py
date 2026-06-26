@@ -37,6 +37,11 @@ class Config:
     whisper_exe: Path = field(default_factory=lambda: TOOLS_DIR / "whisper" / "Release" / "whisper-cli.exe")
     whisper_model: Path = field(default_factory=lambda: TOOLS_DIR / "whisper" / "models" / "ggml-base.en.bin")
 
+    # --- strategist (Strategy track S1): the deliberate per-team planner ---
+    strategist_model: str = field(default_factory=lambda: _env("TAVERN_STRATEGIST_MODEL", ""))  # "" -> default_model
+    strategist_interval: float = 25.0   # base cadence for re-planning
+    strategist_jitter: float = 5.0
+
     # --- gating / cadence (design §7, §9) ---
     idle_banter_seconds: float = 30.0   # base idle-banter interval per persona
     idle_banter_jitter: float = 12.0    # +/- jitter so personas don't sync up
