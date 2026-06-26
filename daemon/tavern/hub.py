@@ -59,6 +59,10 @@ class Hub:
         # Optional render hook, invoked the moment a line is posted so console
         # output stays in true chronological order. (line, source_persona|None)
         self.on_line: Optional[Callable[[ChatLine, Optional[Persona]], None]] = None
+        # Optional hook fired when a directive is recorded (used by the bridge writer).
+        self.on_directive: Optional[Callable[[DirectiveRecord], None]] = None
+        # Optional hook fired when a team plan changes (used by the bridge writer).
+        self.on_plan: Optional[Callable[[str, Any], None]] = None
 
     # --- registration ---
     def register(self, personas: Iterable[Persona]) -> None:
@@ -77,6 +81,8 @@ class Hub:
     # --- team plans (Strategy track S1) ---
     def set_plan(self, team: str, plan: Any) -> None:
         self.team_plans[team] = plan
+        if self.on_plan:
+            self.on_plan(team, plan)
 
     def plan_for(self, team: str) -> Any | None:
         return self.team_plans.get(team)
@@ -127,6 +133,9 @@ class Hub:
             p.trigger(priority=True)
 
     def record_directive(self, persona: Persona, directive: Directive) -> None:
-        self.directives.append(
-            DirectiveRecord(persona=persona.name, player_id=persona.player_id, directive=directive, ts=time.time())
+        rec = DirectiveRecord(
+            persona=persona.name, player_id=persona.player_id, directive=directive, ts=time.time()
         )
+        self.directives.append(rec)
+        if self.on_directive:
+            self.on_directive(rec)

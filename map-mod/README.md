@@ -10,4 +10,6 @@ Built with [`cipherxof/wc3-ts-template`](https://github.com/cipherxof/wc3-ts-tem
 
 **AMAI fork** — `commander_remote.lua` (~200 lines) exposes `setStrategy`/`setAggression`/`setTechBias`, each flipping an existing AMAI global its decision loop already reads.
 
-_Empty — populated starting at M4._
+**Bridge wire format is fixed and the daemon half is built** — the map writes `state.json` and reads `directive.json` per [docs/bridge-protocol.md](../docs/bridge-protocol.md). Daemon side: `daemon/tavern/bridge.py`, exercised via `python -m tavern --bridge <dir>` (Stage A passing). The map's state-export targets the schema the summarizers already consume; `directive.directives[<slot>].strategy` is pre-normalized to the controlled vocab the AMAI fork switches on.
+
+_Empty — populated starting at M4 (needs Reforged + World Editor)._

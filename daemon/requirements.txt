@@ -4,6 +4,12 @@ httpx>=0.27
 pydantic>=2.6
 pyyaml>=6.0
 
+# Voice frontend (M3). TTS/STT shell out to the installed Piper/whisper.cpp
+# binaries; these are only needed for push-to-talk speech *input*.
+pynput>=1.7
+sounddevice>=0.4
+numpy>=1.26
+
 # Dev / test
 pytest>=8.0
 pytest-asyncio>=0.23
