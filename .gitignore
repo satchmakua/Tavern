@@ -1,0 +1,40 @@
+# Python (daemon + voice frontend)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node / TypeScript (map-mod, wc3-ts-template)
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Models & audio (large, fetched locally — never commit)
+*.gguf
+*.bin
+*.onnx
+*.wav
+models/
+
+# Bridge runtime files (regenerated each game)
+*.directive.json
+*.state.json
+
+# WC3 / map build artifacts
+*.w3x
+*.w3m
+*.mpq
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
