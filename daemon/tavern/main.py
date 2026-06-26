@@ -15,6 +15,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from .bridge import DirectiveWriter, StateFileWatcher
 from .config import Config
 from .fakestate import FakeStateEmitter
 from .hub import Hub
@@ -25,6 +26,7 @@ from .persona import Persona, load_personas
 from .schema import Directive, OutputParseError, parse_output
 from .strategy import GamePlan, Strategist
 from .summarizer import build_user_prompt, summarize, summarize_outcome, summarize_team
+from .voice import PiperTTS, VoiceInput, WhisperSTT
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_SCENARIO = HERE.parent / "scenarios" / "skirmish.json"
@@ -182,12 +184,16 @@ async def idle_timer(persona: Persona, config: Config) -> None:
         persona.trigger(priority=False)
 
 
-async def voice_consumer(hub: Hub, render: Renderer) -> None:
+async def voice_consumer(hub: Hub, render: Renderer, tts: PiperTTS | None) -> None:
     """One persona speaks aloud at a time (design §3)."""
     while True:
         persona, text = await hub.voice_out.get()
         render.voice(persona, text)
-        await asyncio.sleep(min(4.0, 1.0 + len(text) * 0.04))  # simulate speaking time
+        if tts is not None:
+            # blocking synth+play off the event loop; the single consumer keeps it serial
+            await asyncio.to_thread(tts.speak, text, persona.voice)
+        else:
+            await asyncio.sleep(min(4.0, 1.0 + len(text) * 0.04))  # simulate speaking time
         hub.voice_out.task_done()
 
 
@@ -219,6 +225,23 @@ async def run(config: Config, args: argparse.Namespace) -> int:
 
     hub.on_line = on_line
 
+    # Bridge mode (Phase D): wire the file channel to/from the WC3 map. The
+    # DirectiveWriter tees off the same hub hooks the console renderer uses.
+    writer: DirectiveWriter | None = None
+    if args.bridge:
+        bridge_dir = Path(args.bridge)
+        bridge_dir.mkdir(parents=True, exist_ok=True)
+        writer = DirectiveWriter(bridge_dir, hub, config)
+        _console_on_line = on_line
+
+        def on_line_bridge(line, source: Persona | None) -> None:
+            _console_on_line(line, source)  # tee to console for debugging
+            writer.note_chat(line, source)
+
+        hub.on_line = on_line_bridge
+        hub.on_directive = writer.note_directive
+        hub.on_plan = writer.note_plan
+
     llm: LLM = FakeLLM(seed=args.seed) if args.fake_llm else OllamaClient(
         config.ollama_host, config.request_timeout, config.temperature, config.keep_alive
     )
@@ -246,8 +269,36 @@ async def run(config: Config, args: argparse.Namespace) -> int:
             except LLMError as e:
                 render.warn(f"warmup {model}: {e}")
 
+    # Voice out (M3): synthesize say_aloud lines with Piper, one at a time.
+    tts: PiperTTS | None = None
+    if config.audio_output and not args.no_audio:
+        tts = PiperTTS(config)
+        if not tts.available:
+            render.warn("Piper voices not found — falling back to printed voice lines")
+            tts = None
+
+    # Voice in (M3): push-to-talk mic → whisper → human chat, tagged by speaker.
+    voice_in: VoiceInput | None = None
+    if args.voice:
+        stt = WhisperSTT(config)
+        if not stt.available:
+            render.warn("whisper.cpp not found — --voice disabled")
+        else:
+            loop = asyncio.get_running_loop()
+
+            def on_utterance(speaker: str, text: str) -> None:  # called from a worker thread
+                loop.call_soon_threadsafe(hub.post_chat, speaker, text, "human")
+
+            voice_in = VoiceInput(config, stt, on_utterance)
+            try:
+                voice_in.start()
+                print(color.dim(f"  voice-in: push-to-talk on [{config.ptt_key}] as '{config.speaker_name}'"))
+            except Exception as e:  # missing deps / no audio device
+                render.warn(f"--voice could not start: {e}")
+                voice_in = None
+
     tasks: list[asyncio.Task] = []
-    tasks.append(asyncio.create_task(voice_consumer(hub, render)))
+    tasks.append(asyncio.create_task(voice_consumer(hub, render, tts)))
     for team, strategist in strategists.items():
         tasks.append(asyncio.create_task(
             strategist_loop(strategist, hub, config, render, is_ally=(team in ally_teams))
@@ -256,23 +307,36 @@ async def run(config: Config, args: argparse.Namespace) -> int:
         tasks.append(asyncio.create_task(persona_loop(p, hub, llm, config, render)))
         tasks.append(asyncio.create_task(idle_timer(p, config)))
 
-    emitter: FakeStateEmitter | None = None
-    duration = float(args.duration) if args.duration else 60.0
-    if args.scenario:
+    # Input source: live bridge files, or a scripted FakeState scenario.
+    duration = float(args.duration) if args.duration else None
+    if args.bridge:
+        watcher = StateFileWatcher(Path(args.bridge), hub, config)
+        tasks.append(asyncio.create_task(watcher.run()))
+        tasks.append(asyncio.create_task(writer.run()))
+        print(color.dim(f"  bridge: {Path(args.bridge).resolve()}  "
+                        f"(reads {config.state_file_name}, writes {config.directive_file_name})"))
+    elif args.scenario:
         scenario_path = Path(args.scenario)
         if not scenario_path.exists():
             print(color.warn(f"Scenario not found: {scenario_path}"), file=sys.stderr)
             return 1
         emitter = FakeStateEmitter(hub, scenario_path, speed=args.speed)
-        if not args.duration:
+        if duration is None:
             duration = emitter.duration + 8.0  # tail so late reactions render
         tasks.append(asyncio.create_task(emitter.run()))
+    if duration is None and not args.bridge:
+        duration = 60.0  # plain run with no scenario: bounded default
 
     try:
-        await asyncio.sleep(duration)
+        if duration is None:
+            await asyncio.Event().wait()  # bridge mode: run until Ctrl-C
+        else:
+            await asyncio.sleep(duration)
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
+        if voice_in is not None:
+            voice_in.stop()
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -286,12 +350,16 @@ def cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tavern", description="Tavern Companion Daemon (M1: chat-only)")
     parser.add_argument("--fake-llm", action="store_true", help="run offline with a canned LLM (no Ollama)")
     parser.add_argument("--scenario", default=str(DEFAULT_SCENARIO), help="FakeState scenario JSON (or 'none')")
+    parser.add_argument("--bridge", default=None, metavar="DIR",
+                        help="run against the live WC3 file bridge in DIR (reads state.json, writes directive.json); runs until Ctrl-C")
     parser.add_argument("--persona", action="append", help="limit to persona by name (repeatable)")
     parser.add_argument("--duration", type=float, default=None, help="run for N seconds (default: scenario length + tail)")
     parser.add_argument("--speed", type=float, default=1.0, help="scenario playback speed multiplier")
     parser.add_argument("--model", default=None, help="override default Ollama model")
     parser.add_argument("--host", default=None, help="override Ollama host URL")
     parser.add_argument("--seed", type=int, default=None, help="RNG seed (deterministic banter/arbiter)")
+    parser.add_argument("--voice", action="store_true", help="enable push-to-talk speech input (whisper.cpp)")
+    parser.add_argument("--no-audio", action="store_true", help="don't play TTS audio (print voice lines instead)")
     parser.add_argument("--no-color", action="store_true", help="disable ANSI colors")
     args = parser.parse_args(argv)
 

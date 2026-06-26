@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 # repo_root/daemon/tavern/config.py  ->  parents[2] == repo root
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,10 +38,26 @@ class Config:
     whisper_exe: Path = field(default_factory=lambda: TOOLS_DIR / "whisper" / "Release" / "whisper-cli.exe")
     whisper_model: Path = field(default_factory=lambda: TOOLS_DIR / "whisper" / "models" / "ggml-base.en.bin")
 
+    # --- voice frontend behavior (M3, design §3) ---
+    default_voice: str = "en_US-lessac-medium"  # fallback Piper voice (file stem)
+    audio_output: bool = True                   # actually play TTS (False = print only)
+    ptt_key: str = "ctrl_r"                     # push-to-talk key (pynput Key name or char)
+    mic_device: Optional[int] = None            # input device index (None = system default)
+    mic_samplerate: int = 16000                 # whisper.cpp expects 16 kHz mono
+    speaker_name: str = "you"                   # tag applied to this mic's utterances
+
     # --- strategist (Strategy track S1): the deliberate per-team planner ---
     strategist_model: str = field(default_factory=lambda: _env("TAVERN_STRATEGIST_MODEL", ""))  # "" -> default_model
     strategist_interval: float = 25.0   # base cadence for re-planning
     strategist_jitter: float = 5.0
+
+    # --- bridge (Phase D): file channel to/from the WC3 map (war3_lua, design §5) ---
+    # Map writes <bridge_dir>/state.json; daemon writes <bridge_dir>/directive.json.
+    state_file_name: str = "state.json"
+    directive_file_name: str = "directive.json"
+    state_poll_interval: float = 0.5     # how often to check the state file for changes
+    directive_flush_interval: float = 0.5  # how often to flush pending directives to disk
+    directive_chat_limit: int = 50       # bounded chat log kept in the directive file
 
     # --- gating / cadence (design §7, §9) ---
     idle_banter_seconds: float = 30.0   # base idle-banter interval per persona

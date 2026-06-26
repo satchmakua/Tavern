@@ -4,7 +4,7 @@ Host-side, outside the WC3 sandbox. See [design §9](../tavern-design.md) and [�
 
 **Companion Daemon** — a single asyncio process: one coroutine per persona (each with its own state, history, rate limit), a file-watcher on the map's state file, a queue subscriber for transcribed voice, a directive-file writer, a bounded shared chat history, and a state summarizer (raw snapshot → ~15–20 lines per player perspective).
 
-**Voice Frontend** — `whisper.cpp` (`base.en`) + `silero-vad` for speech-in, Piper for speech-out. Push-to-talk via `pynput`, per-device speaker tagging, one-voice-at-a-time. Never touches the game sandbox. _(Not built yet — M3.)_
+**Voice Frontend** (`tavern/voice.py`, M3) — Piper for speech-out (`say_aloud` → real audio, one voice at a time, per-persona voice aliasing), whisper.cpp for speech-in via **push-to-talk** (`pynput` key-hold → `sounddevice` 16 kHz capture → whisper → human chat, tagged by speaker/device). Never touches the game sandbox. Enable input with `--voice`; `--no-audio` prints voice lines instead of playing them. **Use headsets, not room speakers** — open mics + TTS create a feedback loop (design §3). Add more voices by dropping `.onnx` files in `tools/piper/voices` and mapping them in `voice.py`.
 
 Talks to the LLM via Ollama at `http://localhost:11434`.
 
@@ -20,6 +20,8 @@ M1/M2 core is in place and runs **offline** (no Ollama needed) via a fake LLM:
 - `tavern/knowledge.py` — **S2**: compact RTS grounding (race/matchup/timing) injected into the strategist prompt
 - `tavern/summarizer.py` — player-scoped state → NL summary, team-scoped summary for the strategist, and `summarize_outcome` (S2 plan feedback)
 - `tavern/llm.py` — `OllamaClient` (native `/api/chat`, `format: json`) and `FakeLLM`
+- `tavern/voice.py` — **M3**: `PiperTTS` (speech-out), `WhisperSTT` + `VoiceInput` (push-to-talk speech-in)
+- `tavern/bridge.py` — **M5 (daemon half)**: `StateFileWatcher` + `DirectiveWriter` (file channel to/from the WC3 map; see [docs/bridge-protocol.md](../docs/bridge-protocol.md))
 - `tavern/fakestate.py` — replays a scripted scenario into the Hub on a timer
 - `tavern/main.py` — wires it together with a console renderer
 
