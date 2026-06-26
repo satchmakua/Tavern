@@ -146,20 +146,6 @@ async def voice_consumer(hub: Hub, render: Renderer) -> None:
         hub.voice_out.task_done()
 
 
-async def chat_mirror(hub: Hub, render: Renderer) -> None:
-    """Render human + event lines injected by the emitter (AI lines render in-loop)."""
-    seen = 0
-    while True:
-        lines = list(hub.chat)
-        for line in lines[seen:]:
-            if line.kind == "human":
-                render.human(line.speaker, line.text)
-            elif line.kind == "system":
-                render.event(line.text)
-        seen = len(lines)
-        await asyncio.sleep(0.1)
-
-
 # --------------------------------------------------------------------------- #
 # orchestration
 # --------------------------------------------------------------------------- #
@@ -178,6 +164,16 @@ async def run(config: Config, args: argparse.Namespace) -> int:
     hub = Hub(config, rng=random.Random(args.seed))
     hub.register(personas)
 
+    def on_line(line, source: Persona | None) -> None:
+        if source is not None:
+            render.chat(source, line.text)
+        elif line.kind == "human":
+            render.human(line.speaker, line.text)
+        else:
+            render.event(line.text)
+
+    hub.on_line = on_line
+
     llm: LLM = FakeLLM(seed=args.seed) if args.fake_llm else OllamaClient(
         config.ollama_host, config.request_timeout, config.temperature
     )
@@ -189,7 +185,6 @@ async def run(config: Config, args: argparse.Namespace) -> int:
     ))
 
     tasks: list[asyncio.Task] = []
-    tasks.append(asyncio.create_task(chat_mirror(hub, render)))
     tasks.append(asyncio.create_task(voice_consumer(hub, render)))
     for p in personas:
         tasks.append(asyncio.create_task(persona_loop(p, hub, llm, config, render)))
