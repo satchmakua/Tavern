@@ -2,6 +2,8 @@
 
 The build sequence from [tavern-design.md](tavern-design.md) §10. **Each piece is built on a working previous piece — do not parallelize until confident.** Estimate: ~10–12 weeks of evenings/weekends for a competent solo engineer.
 
+Beyond design §10, the **[Strategy track (S1–S4)](#strategy-track-s1s4--making-the-agents-out-strategize-scripted-ai)** is first-class work (not parked): it's what makes the agents' *decisions* genuinely smarter and more creative than scripted AI, closing design §8's said-vs-done gap.
+
 Track live status in [progress.md](progress.md).
 
 ---
@@ -46,6 +48,28 @@ Expand to 8–12 personas with distinct voices. One-click launcher (PowerShell i
 
 ---
 
+## Strategy track (S1–S4) — making the agents out-strategize scripted AI
+
+The M-track makes the agents *talk* strategy and adapt/coordinate. **This track makes their decisions genuinely better and more creative than AMAI** — the core ambition. It's daemon-side, so build and verify it against `FakeState` before the bridge exists.
+
+> **Why this is its own track:** the current single-shot 8B-per-tick design produces strategy *talk* but mediocre strategy *decisions* (observed: Dakkar pinning `aggression=1.0` every turn with free-form intents). Clearing the "smarter than AMAI" bar takes a deliberate planner, grounding, a wider control surface, and a stronger model — below.
+
+**Sequencing:** **S1–S2 before M6** (the brain should be good before it drives AMAI). **S3 co-designed with M6** (the control surface *is* what a plan can express into AMAI). **S4 around M7** (when GPU/topology is already being sorted).
+
+### S1 — Strategist loop (deliberate planner, separate from banter)
+Split the macro brain from the chatter. A per-team **Strategist** holds a persistent `GamePlan` (phase, primary objective, target, posture, tech goal, rationale), reads a fuller team-scoped state on a slower cadence (~20–30 s) plus event wakes, and revises the plan with explicit reasoning. Personas derive their chat + directives *from* the team plan instead of reinventing strategy every tick. Verify against `FakeState`; local 8B to start. This is the single biggest lever and matches the TextStarCraft II pattern design §9 cites.
+
+### S2 — Grounding + feedback + controlled vocabulary
+Give the strategist RTS knowledge (build orders, matchup heuristics, timing windows) via system prompt + light retrieval, and feed back the outcome of prior directives ("last push failed, they held with towers") so it adapts instead of vibing. Constrain directives to the controlled vocabulary (§4) with validation + repair. Kills the `aggression=1.0`-every-turn failure mode.
+
+### S3 — Widen the control surface *(co-designed with M6)*
+Expand what a plan can express into the game: a richer directive set, AMAI chat-command passthrough, and dummy-target lures for attack redirection. The bridge from "good plan" to "it happens on the map." Co-evolves with the M6 AMAI hooks.
+
+### S4 — Stronger strategist model / topology
+Move the strategist to a 14B/32B (or the second-machine Ollama in §7); keep banter on 8B/4B. The 8B is the ceiling on decision quality — this is where it climbs. Measure the uplift (better calls, not just longer ones).
+
+---
+
 ## Definition of done (v1)
 
 A 4v4 LAN match — you, Moses, six Companions — where:
@@ -53,7 +77,7 @@ A 4v4 LAN match — you, Moses, six Companions — where:
 - AIs chat unprompted and in response to teammates and opponents;
 - you and Moses address teammates by name and get a reply (chat or voice) within ~3 s;
 - AIs occasionally speak aloud;
-- AI strategy visibly shifts on directives (says aggressive → AMAI gets more aggressive);
+- strategy is more than coarse: a per-team strategist holds a **game plan**, adapts to the human's calls and the opponent's play, revises mid-game, and visibly steers AMAI (says aggressive → AMAI gets more aggressive), with said- and done-strategy broadly converging;
 - it runs fully offline, no paid APIs, **no desyncs**;
 - it's one GitHub repo with a README another competent engineer could follow.
 
@@ -67,7 +91,7 @@ Scope creep is *certain*; park it here rather than letting it derail v1.
 - Vision-based micro (LLM driving units directly)
 - Cross-game persona memory
 - Wake-word always-on voice (replacing push-to-talk)
-- Closing the said-strategy vs done-strategy gap (deep AMAI surgery so AI actions match its words)
+- Full said/done convergence at the level of *precise openings* (deep AMAI build-order surgery) — the Strategy track (S1–S4) closes the **macro** gap; pixel-precise build execution stays long-tail
 - Battle.net / non-LAN support (currently disqualified by `war3_lua`)
 - Observer shared-memory reader for unmodified ladder maps (design §5.5)
 

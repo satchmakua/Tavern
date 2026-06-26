@@ -82,11 +82,24 @@ class FakeLLM:
         "teching now, hold them off",
     ]
     _STRATS = ["expand_now", "tech_up", "mass_grunt", "defend", "creep_more"]
+    _PHASES = ["opening", "early", "mid", "late"]
+    _OBJECTIVES = ["pressure their natural", "secure a fast expansion", "tech to tier 2 then push",
+                   "defend and creep for XP", "mass air and contain"]
 
     def __init__(self, seed: int | None = None) -> None:
         self._rng = random.Random(seed)
 
     async def complete(self, *, model: str, system: str, user: str) -> str:
+        if "[STRATEGIST]" in user:  # a Strategist call expects a GamePlan
+            return json.dumps({
+                "phase": self._rng.choice(self._PHASES),
+                "intent": self._rng.choice(self._STRATS),
+                "objective": self._rng.choice(self._OBJECTIVES),
+                "target_player": None,
+                "posture": round(self._rng.random(), 2),
+                "tech_goal": self._rng.choice(["tier2", "air", "casters", None]),
+                "rationale": "(fake-llm plan)",
+            })
         # Pull the persona's name out of the system prompt for a touch of flavor.
         say = self._rng.choice(self._LINES)
         out: dict = {"say_in_chat": say, "say_aloud": None, "thinking": "(fake-llm)"}

@@ -14,8 +14,11 @@ M1/M2 core is in place and runs **offline** (no Ollama needed) via a fake LLM:
 
 - `tavern/schema.py` — persona output contract (`PersonaOutput`/`Directive`) + tolerant JSON parsing
 - `tavern/persona.py` — `Persona` (static YAML + runtime state) and the loader
-- `tavern/hub.py` — shared chat history, game state, directive log, voice queue, wake-routing (mentions, events, AI↔AI turn cap, broadcast arbiter)
-- `tavern/summarizer.py` — player-scoped state → NL summary
+- `tavern/hub.py` — shared chat history, game state, directive log, voice queue, wake-routing (mentions, events, AI↔AI turn cap, broadcast arbiter), per-team game plans
+- `tavern/strategy.py` — **Strategy track S1**: per-team `Strategist` + `GamePlan` (deliberate planner, separate from banter); personas derive their chat/directives from the team plan
+- `tavern/directives.py` — **S2**: normalize free-form intents → controlled vocabulary (design §4) for the Bridge/AMAI
+- `tavern/knowledge.py` — **S2**: compact RTS grounding (race/matchup/timing) injected into the strategist prompt
+- `tavern/summarizer.py` — player-scoped state → NL summary, team-scoped summary for the strategist, and `summarize_outcome` (S2 plan feedback)
 - `tavern/llm.py` — `OllamaClient` (native `/api/chat`, `format: json`) and `FakeLLM`
 - `tavern/fakestate.py` — replays a scripted scenario into the Hub on a timer
 - `tavern/main.py` — wires it together with a console renderer
