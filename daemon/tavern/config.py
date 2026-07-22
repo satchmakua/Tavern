@@ -51,10 +51,11 @@ class Config:
     strategist_interval: float = 25.0   # base cadence for re-planning
     strategist_jitter: float = 5.0
 
-    # --- bridge (Phase D): file channel to/from the WC3 map (war3_lua, design §5) ---
-    # Map writes <bridge_dir>/state.json; daemon writes <bridge_dir>/directive.json.
-    state_file_name: str = "state.json"
-    directive_file_name: str = "directive.json"
+    # --- bridge (Phase D): file channel to/from the WC3 map (w3ts FileIO, §5) ---
+    # Map writes <bridge_dir>/TavernState.txt; daemon writes TavernDirective.txt.
+    # (w3ts File requires .txt/.pld; bridge_dir is the map's CustomMapData folder.)
+    state_file_name: str = "TavernState.txt"
+    directive_file_name: str = "TavernDirective.txt"
     state_poll_interval: float = 0.5     # how often to check the state file for changes
     directive_flush_interval: float = 0.5  # how often to flush pending directives to disk
     directive_chat_limit: int = 50       # bounded chat log kept in the directive file

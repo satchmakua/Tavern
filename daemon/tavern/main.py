@@ -231,7 +231,7 @@ async def run(config: Config, args: argparse.Namespace) -> int:
     if args.bridge:
         bridge_dir = Path(args.bridge)
         bridge_dir.mkdir(parents=True, exist_ok=True)
-        writer = DirectiveWriter(bridge_dir, hub, config)
+        writer = DirectiveWriter(bridge_dir, hub, config, wc3=args.wc3)
         _console_on_line = on_line
 
         def on_line_bridge(line, source: Persona | None) -> None:
@@ -310,7 +310,7 @@ async def run(config: Config, args: argparse.Namespace) -> int:
     # Input source: live bridge files, or a scripted FakeState scenario.
     duration = float(args.duration) if args.duration else None
     if args.bridge:
-        watcher = StateFileWatcher(Path(args.bridge), hub, config)
+        watcher = StateFileWatcher(Path(args.bridge), hub, config, wc3=args.wc3)
         tasks.append(asyncio.create_task(watcher.run()))
         tasks.append(asyncio.create_task(writer.run()))
         print(color.dim(f"  bridge: {Path(args.bridge).resolve()}  "
@@ -351,7 +351,9 @@ def cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--fake-llm", action="store_true", help="run offline with a canned LLM (no Ollama)")
     parser.add_argument("--scenario", default=str(DEFAULT_SCENARIO), help="FakeState scenario JSON (or 'none')")
     parser.add_argument("--bridge", default=None, metavar="DIR",
-                        help="run against the live WC3 file bridge in DIR (reads state.json, writes directive.json); runs until Ctrl-C")
+                        help="run against the live WC3 file bridge in DIR (reads TavernState.txt, writes TavernDirective.txt); runs until Ctrl-C")
+    parser.add_argument("--wc3", action="store_true",
+                        help="with --bridge: encode/decode the w3ts File (Preload) format for a real Reforged map")
     parser.add_argument("--persona", action="append", help="limit to persona by name (repeatable)")
     parser.add_argument("--duration", type=float, default=None, help="run for N seconds (default: scenario length + tail)")
     parser.add_argument("--speed", type=float, default=1.0, help="scenario playback speed multiplier")

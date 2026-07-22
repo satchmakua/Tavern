@@ -1,16 +1,17 @@
 """Phase D — the file channel between the daemon and the WC3 map (design §5).
 
-Two halves, both plain JSON files in a shared `bridge_dir` that `war3_lua` can
-read/write from inside the map:
+Two halves, both `.txt` files in the map's `CustomMapData` folder, exchanged via
+w3ts `File` (the Preload exploit). See docs/bridge-protocol.md.
 
-  - **directive.json** (daemon → game): persona chat lines to render, per-player
-    AMAI directives, and the current team plans. Written by `DirectiveWriter`.
-  - **state.json** (game → daemon): a game-state snapshot + any new human chat.
-    Read by `StateFileWatcher`, which feeds it into the Hub exactly like the
-    `FakeStateEmitter` does for scripted scenarios.
+  - **TavernDirective.txt** (daemon → game): pipe-delimited lines the map parses —
+    `CHAT|id|persona|text` and `DIR|player|strategy|aggression|target`. Written by
+    `DirectiveWriter`.
+  - **TavernState.txt** (game → daemon): a JSON state snapshot + any new human chat,
+    read by `StateFileWatcher` and fed into the Hub like `FakeStateEmitter`.
 
-Both sides write atomically (temp file + os.replace) so the reader never sees a
-half-written file. See docs/bridge-protocol.md for the wire format.
+With `wc3=True`, the daemon wraps/unwraps the w3ts `File` on-disk format (`wc3codec`)
+so the real map can read/write the files. With `wc3=False` the files are raw text —
+used for offline (`--fake-llm`) Stage-A testing. Writes are atomic (temp + os.replace).
 """
 from __future__ import annotations
 
@@ -23,25 +24,32 @@ from typing import Any, Optional
 from .config import Config
 from .hub import ChatLine, DirectiveRecord, Hub
 from .persona import Persona
+from .wc3codec import decode_file, encode_file
 
 
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+def _atomic_write(path: Path, data: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(data, encoding="utf-8")
     os.replace(tmp, path)  # atomic on the same volume
 
 
+def _san(s: str) -> str:
+    """Keep pipe-delimited fields intact."""
+    return s.replace("|", "/").replace("\n", " ").replace("\r", " ")
+
+
 class DirectiveWriter:
-    """Collects what the daemon wants the map to do and flushes it to directive.json.
+    """Collects what the daemon wants the map to do and flushes it as delimited lines.
 
     Driven by Hub hooks (no new plumbing in the loops): `note_chat` off `hub.on_line`
     captures AI chat lines; `note_directive` off `hub.on_directive` captures per-player
-    directives. Team plans are read from `hub.team_plans` at flush time.
+    directives.
     """
 
-    def __init__(self, bridge_dir: Path, hub: Hub, config: Config) -> None:
+    def __init__(self, bridge_dir: Path, hub: Hub, config: Config, *, wc3: bool = False) -> None:
         self.path = bridge_dir / config.directive_file_name
         self.hub = hub
+        self.wc3 = wc3
         self._chat_limit = config.directive_chat_limit
         self._flush_interval = config.directive_flush_interval
         self._chat: list[dict[str, Any]] = []
@@ -68,17 +76,29 @@ class DirectiveWriter:
         self._dirty = True
 
     def note_plan(self, team: str, plan: Any) -> None:
-        # plans are read live from hub.team_plans at flush; just mark dirty.
-        self._dirty = True
+        # plans aren't sent to the map (the map switches on per-player directives).
+        return
 
-    def _payload(self) -> dict[str, Any]:
-        plans = {team: plan.model_dump() for team, plan in self.hub.team_plans.items()}
-        return {"chat": self._chat, "directives": self._directives, "plan": plans}
+    def _payload(self) -> str:
+        lines: list[str] = []
+        for c in self._chat:
+            lines.append(f"CHAT|{c['id']}|{_san(c['persona'])}|{_san(c['text'])}")
+        for pid, d in self._directives.items():
+            aggr = d.get("aggression")
+            lines.append(
+                f"DIR|{pid}|{_san(d.get('strategy') or '')}|"
+                f"{'' if aggr is None else aggr}|{_san(d.get('target_player') or '')}"
+            )
+        return "\n".join(lines)
 
     def flush(self) -> bool:
         if not self._dirty:
             return False
-        _atomic_write_json(self.path, self._payload())
+        content = self._payload()
+        try:
+            _atomic_write(self.path, encode_file(content) if self.wc3 else content)
+        except OSError:
+            return False  # transient lock (e.g. OneDrive syncing) — retry next tick
         self._dirty = False
         return True
 
@@ -90,11 +110,12 @@ class DirectiveWriter:
 
 
 class StateFileWatcher:
-    """Tails state.json and feeds changes into the Hub (mirrors FakeStateEmitter)."""
+    """Tails TavernState.txt and feeds changes into the Hub (mirrors FakeStateEmitter)."""
 
-    def __init__(self, bridge_dir: Path, hub: Hub, config: Config) -> None:
+    def __init__(self, bridge_dir: Path, hub: Hub, config: Config, *, wc3: bool = False) -> None:
         self.path = bridge_dir / config.state_file_name
         self.hub = hub
+        self.wc3 = wc3
         self._interval = config.state_poll_interval
         self._last_mtime: Optional[float] = None
 
@@ -107,9 +128,18 @@ class StateFileWatcher:
         if mtime == self._last_mtime:
             return False
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return False  # likely a half-written file; retry next poll
+            raw = self.path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        text: Optional[str] = raw
+        if self.wc3:
+            text = decode_file(raw)  # unwrap the w3ts File format
+            if text is None:
+                return False  # not a complete File yet (mid-write)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return False  # half-written; retry next poll
         self._last_mtime = mtime
         self._apply(data)
         return True

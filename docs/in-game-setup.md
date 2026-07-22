@@ -11,71 +11,46 @@ back, I take over the code (scaffold the map project + write the bridge).
 > DLL mod, no binary injection** — simpler and lower-risk. You don't install anything
 > for FileIO; it's a Lua snippet I bundle into the map.
 
-## Already done / detected ✅
-- **Reforged** installed (you).
+## Already done ✅
+- **Reforged** installed at `C:\Program Files (x86)\Warcraft III\` (exe paths confirmed).
 - **Node v24**, **npm 11**, **git 2.54** — present, so the TypeScript→Lua toolchain is ready.
+- **Local Files enabled** — I set `HKCU\Software\Blizzard Entertainment\Warcraft III` →
+  `Allow Local Files = 1` (verified). *(Stage 2 below is done.)*
+- **AMAI 3.6.0 downloaded + extracted** to `tools/amai/`, ready to install.
 - Daemon side of the bridge is built and tested (writes `directive.json`, reads `state.json`).
+- **Your WC3 data lives in OneDrive:** `C:\Users\satch\OneDrive\Documents\Warcraft III\`
+  (Documents is redirected). So the **bridge directory** will be
+  `…\OneDrive\Documents\Warcraft III\CustomMapData\Tavern\`. *(Watch item: OneDrive may
+  sync/lock the rapidly-updated bridge files — we may pause sync on that folder.)*
+
+> **Note:** I first tried AMAI's *local-mod* method (scripts in `_retail_\Scripts\`), but
+> Reforged **2.0.4** doesn't honor that global override (no AMAI dialog appeared). AMAI 3.6.0
+> *does* support 2.0.4 — so we use the reliable **per-map install** below, which is what our
+> bridge map needs anyway. (Those inert `_retail_\Scripts\` files are harmless; delete the
+> folder anytime.)
 
 ---
 
-## Stage 1 — Locate Reforged + create the data folder  *(~10 min, you)*
+## The one step left for you — make a base map  *(~3 min in the World Editor)*
 
-1. Open **Battle.net**, launch **Warcraft III**, get to the main menu, then **quit**.
-   (This first launch creates `…\Documents\Warcraft III\`, which we need.)
-2. Find the install folder: in Battle.net, select **Warcraft III** → click the **gear ⚙️**
-   next to the Play button → **Show in Explorer**.
-3. In that folder, locate these two executables (usually under `…\_retail_\x86_64\`):
-   - **`Warcraft III.exe`**
-   - **`World Editor.exe`**
-4. Confirm this folder exists (create it if it doesn't): 
-   `%USERPROFILE%\Documents\Warcraft III\CustomMapData\` — this is our **bridge directory**.
-5. **➡️ Report back to me:** the full paths to `Warcraft III.exe` and `World Editor.exe`.
-   I need `Warcraft III.exe` for the template's `config.json` (`gameExecutable`), and the
-   World Editor to author the map.
+This same map becomes the base for our bridge, so it's not throwaway work.
 
-*(I tried to auto-detect your install and couldn't find it at the usual locations or in
-the Battle.net config — so Step 2 is the reliable way to get the real path.)*
+1. Open the **World Editor** (`…\_retail_\x86_64\World Editor.exe`).
+2. **File → Open Map…** → open the built-in **`(4) Lost Temple`**.
+3. **File → Save Map As…** → save to **`C:\Tavern\maps\LostTemple.w3x`**
+   (create the `C:\Tavern\maps\` folder; keep it OUT of OneDrive to avoid sync locks).
+4. **➡️ Tell me when it's saved** (or paste the exact path). Then **I** run the AMAI
+   per-map installer on it (`InstallREFORGEDToMap.bat "…LostTemple.w3x" 0` — Commander
+   off, since Tavern is our commander) and hand it back.
 
----
-
-## Stage 2 — Enable Local Files  *(~3 min, you — or let me)*
-
-Reforged blocks locally-saved custom maps (and local file reads) by default. You must
-enable them, or Stage 3 and the bridge won't load.
-
-- **Known method (registry):** under `HKEY_CURRENT_USER\Software\Blizzard Entertainment\Warcraft III`,
-  add a **DWORD** named **`Allow Local Files`** set to **`1`**.
-- I can set this for you with one command — just say "set local files" and I'll apply it
-  and read it back to confirm.
-
-You'll verify it actually took effect in Stage 3 (if a locally-saved map refuses to load,
-that's this setting — ping me).
+### Then you verify AMAI *(5 min)*
+Warcraft III → **Single Player → Custom Game** → load your AMAI'd `LostTemple.w3x` → add a
+**Computer** opponent → **Start**. A brief **language dialog** at the start = AMAI loaded;
+then watch it **expand, tech, and attack** like a real player. Report **"AMAI works."**
 
 ---
 
-## Stage 3 — Prove AMAI works on Reforged  *(~20 min, you)*
-
-This de-risks the single biggest integration point (design §11: "AMAI doesn't shift
-behavior" is the top risk) **before** we build anything on top of it.
-
-1. **Download AMAI** for Reforged: get release **2.0.4 or newer** from
-   <https://github.com/SMUnlimited/AMAI/releases>. Unzip to e.g. `C:\tools\AMAI\`.
-2. **Make a base map you own:** open **World Editor** → *File → Open* → built-in
-   **`(4)Lost Temple`** → *File → **Save Map As*** → save to e.g.
-   `C:\Tavern\maps\LostTemple.w3x`.
-3. **Install AMAI into that map** (either way):
-   - GUI: run **`amai-installer.exe`**, select `LostTemple.w3x`, choose the **Reforged**
-     option, click **Install**; **or**
-   - CMD (from the AMAI folder): `.\InstallREFORGEDToMap.bat "C:\Tavern\maps\LostTemple.w3x" 1`
-4. **Test it:** Warcraft III → **Single Player → Custom Game** → load `LostTemple.w3x` →
-   add a **Computer** opponent → **Start**. Watch ~5 min: a real AMAI opponent builds an
-   economy, expands, and sends attack waves (clearly smarter than Blizzard's default AI).
-5. **➡️ Report back to me:** "AMAI works" + the path to the AMAI-installed
-   `LostTemple.w3x`. That map becomes the base I add the bridge to.
-
----
-
-## After your three stages — what I do (no action from you)
+## After your play-test — what I do (no action from you)
 
 - Scaffold `map-mod/` from **wc3-ts-template** (`npm install`; set `config.json` →
   `gameExecutable` = your `Warcraft III.exe`). Confirmed prereqs: Node + WC3 1.31+.
@@ -85,7 +60,13 @@ behavior" is the top risk) **before** we build anything on top of it.
   - **Daemon → Game:** host reads `directive.json` via `FileIO.Load`, then **`BlzSendSyncData`**
     → every client renders the line with `BlzDisplayChatMessage` and applies the AMAI
     directive on the same frame (design §6 — synced from the first line).
-- Integrate the **AMAI fork** (`commander_remote.lua`) so directives nudge AMAI.
+- **Drive AMAI from directives.** AMAI already exposes a command interface
+  (`tools/amai/Commands.txt`) that maps onto our controlled vocab almost 1:1 —
+  `ATTACK <player>`, `BUILD G2G/TOWERS/FARMS`, `NO ATTACKS` (= defend), `CHANGE STRATEGY`,
+  `STOP`. So M6 likely drives AMAI through those handlers rather than a big custom fork.
+  **Open M6 question:** AMAI's *Commander* needs Jass maps, but our bridge is Lua — I'll
+  determine whether to call AMAI's command functions from Lua, set AMAI globals, or use
+  the dummy-target lure (design §8). This doesn't affect your steps.
 - You then run the daemon against the bridge dir:
   `python -m tavern --bridge "%USERPROFILE%\Documents\Warcraft III\CustomMapData\Tavern"`
   and launch the map with `npm run test`.

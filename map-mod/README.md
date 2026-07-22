@@ -12,4 +12,18 @@ Built with [`cipherxof/wc3-ts-template`](https://github.com/cipherxof/wc3-ts-tem
 
 **Bridge wire format is fixed and the daemon half is built** — the map writes `state.json` and reads `directive.json` per [docs/bridge-protocol.md](../docs/bridge-protocol.md). Daemon side: `daemon/tavern/bridge.py`, exercised via `python -m tavern --bridge <dir>` (Stage A passing). The map's state-export targets the schema the summarizers already consume; `directive.directives[<slot>].strategy` is pre-normalized to the controlled vocab the AMAI fork switches on.
 
-_Empty — populated starting at M4 (needs Reforged + World Editor)._
+## Status — scaffolded & building
+
+wc3-ts-template is integrated here and **`npm run build` produces `dist/map.w3x`** with our
+compiled `war3map.lua`. Bridge source under `src/bridge/`:
+
+- `settings.ts` — file names (`TavernState.txt`/`TavernDirective.txt` in CustomMapData), cadences, sync prefix, host slot
+- `sync.ts` — §6 `BlzSendSyncData` / SyncData trigger
+- `state.ts` — game → daemon state export via w3ts `File.write`
+- `directives.ts` — parse the synced directive payload (pipe-delimited) + dedup chat
+- `chat.ts` — `BlzDisplayChatMessage` persona rendering
+- `main.ts` — host-gated timers wiring it together
+
+Build: `cd map-mod && npm install && npm run build` (add the source map + `npm run test` to launch).
+Remaining: swap the source map to the AMAI'd `LostTemple.w3x`, the daemon↔w3ts-`File` codec
+(one in-game format capture), and the AMAI directive hook (M6). See [docs/bridge-protocol.md](../docs/bridge-protocol.md).

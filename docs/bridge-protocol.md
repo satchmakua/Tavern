@@ -1,30 +1,37 @@
 # Bridge protocol — daemon ⇄ WC3 map
 
-The daemon and the map talk through two JSON files in a shared **bridge directory**.
-On **Reforged** the map's file I/O comes from the Preload-based **FileIO** library
-(`FileIO.Save`/`FileIO.Load`), not `war3_lua` (which is classic-only). The bridge
-directory is `Documents\Warcraft III\CustomMapData\Tavern\`. The daemon writes
-atomically (temp file + rename) so the map never reads a half-written file.
+The daemon and the map talk through two files in a shared **bridge directory**. On
+**Reforged** the map uses w3ts's `File` (`node_modules/w3ts/system/file` — the
+Blizzard-sanctioned Preload exploit), so files must live in `Documents\Warcraft III\
+CustomMapData\` and end in `.txt`. The map writes **`TavernState.txt`** and reads
+**`TavernDirective.txt`**; the daemon does the mirror. Sync prefix is `TVN`.
+
+> ✅ **Two encodings — both implemented.** The *logical* payloads are below. On disk,
+> w3ts `File.write` wraps content in Preload/JASS boilerplate so `File.read` can recover it.
+> The daemon speaks that exact format via `daemon/tavern/wc3codec.py` (`encode_file`/
+> `decode_file`), **validated byte-identical against a real in-game `File.write`**. Pass
+> `--wc3` for the real map; omit it for raw-file offline (`--fake-llm`) testing. The bridge
+> dir on this machine is under **OneDrive** (`C:\Users\satch\OneDrive\Documents\Warcraft III\
+> CustomMapData`).
 
 Run the daemon against a bridge dir:
 
 ```bash
-# real game (Reforged): point at the map's CustomMapData folder
-python -m tavern --bridge "%USERPROFILE%\Documents\Warcraft III\CustomMapData\Tavern"
-python -m tavern --bridge ./bridge --fake-llm      # offline, for Stage A testing
+python -m tavern --bridge ./bridge --fake-llm      # offline, raw files, Stage A
+# real game: --bridge "<...>\CustomMapData"  (once the WC3 codec lands)
 ```
 
-See [in-game-setup.md](in-game-setup.md) for installing the game side.
-
-Daemon side: `daemon/tavern/bridge.py` (`StateFileWatcher`, `DirectiveWriter`).
+See [in-game-setup.md](in-game-setup.md) for the game side. Daemon: `daemon/tavern/bridge.py`
+(`StateFileWatcher`, `DirectiveWriter`). Map: `map-mod/src/bridge/*`.
 
 ---
 
-## `state.json` — game → daemon (map writes, daemon reads)
+## `TavernState.txt` — game → daemon (map writes, daemon reads)
 
-A game-state snapshot plus any human chat typed since the last write. Same shape the
-summarizers already consume (`summarize`, `summarize_team`, `summarize_outcome` in
-`daemon/tavern/summarizer.py`), with one extra key `new_chat`.
+Logical payload: a game-state snapshot as JSON (the map builds it in `state.ts`), the
+shape the summarizers already consume (`summarize`, `summarize_team`, `summarize_outcome`
+in `daemon/tavern/summarizer.py`). `new_chat` is added once the map captures human chat.
+The current map export emits `game_time` + `players{name,race,team,gold,lumber,food}`.
 
 ```json
 {
@@ -48,38 +55,28 @@ summarizers already consume (`summarize`, `summarize_team`, `summarize_outcome` 
   skipped and retried on the next poll (`state_poll_interval`, default 0.5 s).
 - Suggested map write cadence: ~2 s.
 
-## `directive.json` — daemon → game (daemon writes, map reads)
+## `TavernDirective.txt` — daemon → game (daemon writes, map reads)
 
-What the daemon wants the map to do this tick.
+Logical payload: **newline-separated, pipe-delimited lines** (the map parses these in
+`directives.ts` without a Lua JSON reader):
 
-```json
-{
-  "chat": [
-    {"id": 40, "persona": "Dakkar", "text": "rax done, going aggressive"},
-    {"id": 41, "persona": "Dakkar", "text": "watch their nat, i'll feint north"}
-  ],
-  "directives": {
-    "3": {"strategy": "attack_Vex", "aggression": 0.8, "target_player": "Vex"}
-  },
-  "plan": {
-    "ally": {"phase": "mid", "intent": "attack_Vex", "objective": "pressure the natural", "target_player": "Vex", "posture": 0.8, "tech_goal": "tier2", "rationale": "..."}
-  }
-}
+```
+CHAT|41|Dakkar|rax done, going aggressive
+CHAT|42|Dakkar|watch their nat, i'll feint north
+DIR|3|attack_Vex|0.8|Vex
 ```
 
-- `chat` is an **append log** with monotonic `id`. The map renders each line once via
-  `BlzDisplayChatMessage` and remembers the highest `id` it has rendered (in a *synced*
-  variable — see §6). Bounded to the last `directive_chat_limit` (default 50) entries.
-- `directives` is **latest-wins per player slot**. `strategy` is already normalized to
-  the controlled vocabulary (`expand_now`, `tech_up`, `defend`, `creep_more`,
-  `mass_<unit>`, `attack_<player>`) by `daemon/tavern/directives.py`, so the AMAI fork
-  can `switch` on a small fixed set.
-- `plan` is the per-team `GamePlan` (S1/S2), exposed for debugging / future use.
+- `CHAT|<id>|<persona>|<text>` — an **append log** with monotonic `id`. The map renders
+  each once via `BlzDisplayChatMessage` and remembers the highest `id` seen (dedup).
+- `DIR|<playerId>|<strategy>|<aggression>|<target>` — **latest-wins per slot**. `strategy`
+  is pre-normalized to the controlled vocab (`expand_now`/`tech_up`/`defend`/`creep_more`/
+  `mass_<unit>`/`attack_<player>`, `daemon/tavern/directives.py`) so the map can `switch`
+  on a small fixed set to drive AMAI (M6).
 
 ## Determinism (design §6) — non-negotiable on the map side
 
-Only the **host** reads `directive.json`. It must NOT apply changes locally. It calls
-`BlzSendSyncData("TAVERN", …)`; every client catches the `SyncData` trigger and applies
-the **identical** mutation (chat render + AMAI directive) on the same simulation frame.
-Never branch synchronous game state on a local async file read (`GetLocalPlayer()` trap).
-Build this synced path from the first line — never ship the un-synced version.
+Only the **host** reads `TavernDirective.txt` (`isHost()` in `main.ts`). It does NOT apply
+locally — it calls `BlzSendSyncData("TVN", text)`; every client catches the SyncData event
+(`sync.ts`) and runs the identical `applyDirectives` on the same frame. File reads/writes
+and sync-sends are local-only (no simulation state branches on them), so host-gating them
+is desync-safe. This synced path is built from the first line.
