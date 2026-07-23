@@ -18,9 +18,9 @@
     "plugins": [
       {
         "transform": "war3-transformer",
-        "mapDir": "C:/Users/satch/Projects/Tavern/map-mod/maps/map.w3x",
+        "mapDir": "C:/Users/satch/Projects/Tavern/map-mod/maps/melee.w3x",
         "entryFile": "C:/Users/satch/Projects/Tavern/map-mod/src/main.ts",
-        "outputDir": "C:/Users/satch/Projects/Tavern/map-mod/dist/map.w3x"
+        "outputDir": "C:/Users/satch/Projects/Tavern/map-mod/dist/melee.w3x"
       }
     ],
     "types": [

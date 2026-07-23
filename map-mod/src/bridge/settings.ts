@@ -7,9 +7,13 @@
  */
 
 // Filenames inside CustomMapData (prefix instead of a subfolder, which Preload
-// can't create). The daemon writes TavernDirective.txt, reads TavernState.txt.
+// can't create). The map writes TavernState.txt and reads rotating TavernDir<n>.txt.
 export const STATE_FILE = "TavernState.txt";
-export const DIRECTIVE_FILE = "TavernDirective.txt";
+// Directives arrive on incrementing filenames to defeat the Reforged Preload cache
+// bug (a filename, once read, is cached for the whole session). The cursor file is
+// read ONCE at start to skip the pre-game backlog.
+export const DIRECTIVE_SEQ_PREFIX = "TavernDir"; // TavernDir0.txt, TavernDir1.txt, …
+export const DIRECTIVE_CURSOR_FILE = "TavernDirCursor.txt";
 
 // Cadences (seconds).
 export const STATE_INTERVAL = 2.0; // how often the host exports game state

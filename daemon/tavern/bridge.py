@@ -47,9 +47,14 @@ class DirectiveWriter:
     """
 
     def __init__(self, bridge_dir: Path, hub: Hub, config: Config, *, wc3: bool = False) -> None:
+        self.dir = bridge_dir
         self.path = bridge_dir / config.directive_file_name
+        self.cursor_path = bridge_dir / config.directive_cursor_name
         self.hub = hub
         self.wc3 = wc3
+        self._seq_prefix = config.directive_seq_prefix
+        self._keep = config.directive_seq_keep
+        self._seq = 0
         self._chat_limit = config.directive_chat_limit
         self._flush_interval = config.directive_flush_interval
         self._chat: list[dict[str, Any]] = []
@@ -96,11 +101,29 @@ class DirectiveWriter:
             return False
         content = self._payload()
         try:
-            _atomic_write(self.path, encode_file(content) if self.wc3 else content)
+            if self.wc3:
+                self._write_seq(content)
+            else:
+                _atomic_write(self.path, content)
         except OSError:
             return False  # transient lock (e.g. OneDrive syncing) — retry next tick
         self._dirty = False
         return True
+
+    def _write_seq(self, content: str) -> None:
+        """Rotating-filename write to defeat the Preload cache bug; a cursor file lets
+        the map skip the backlog (seq) and pre-game chat (maxChatId) at start."""
+        seq = self._seq
+        _atomic_write(self.dir / f"{self._seq_prefix}{seq}.txt", encode_file(content))
+        max_chat_id = self._next_id - 1
+        _atomic_write(self.cursor_path, encode_file(f"{seq}|{max_chat_id}"))
+        old = seq - self._keep
+        if old >= 0:
+            try:
+                (self.dir / f"{self._seq_prefix}{old}.txt").unlink()
+            except OSError:
+                pass
+        self._seq = seq + 1
 
     async def run(self) -> None:
         self.flush()  # ensure the file exists immediately

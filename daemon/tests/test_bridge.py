@@ -58,19 +58,45 @@ def test_directives_latest_wins_per_player(tmp_path):
     assert lines == ["DIR|3|attack|0.9|"]
 
 
-def test_wc3_mode_wraps_in_file_format(tmp_path):
+def test_wc3_mode_writes_seq_files_and_cursor(tmp_path):
     cfg = Config()
     hub = Hub(cfg)
     p = _persona("Dakkar", 3)
     hub.register([p])
     writer = DirectiveWriter(tmp_path, hub, cfg, wc3=True)
     hub.on_directive = writer.note_directive
+    hub.on_line = lambda line, source: writer.note_chat(line, source)
 
     hub.record_directive(p, Directive(strategy="attack_Vex", aggression=0.8, target_player="Vex"))
-    writer.flush()
-    disk = (tmp_path / cfg.directive_file_name).read_text(encoding="utf-8")
-    assert "PreloadFiles" in disk  # wrapped for the map's File.read
-    assert decode_file(disk) == "DIR|3|attack_Vex|0.8|Vex"
+    writer.flush()  # -> TavernDir0.txt + cursor
+    seq0 = (tmp_path / "TavernDir0.txt").read_text(encoding="utf-8")
+    assert "PreloadFiles" in seq0  # w3ts File wrapping for the map's Preloader
+    assert decode_file(seq0) == "DIR|3|attack_Vex|0.8|Vex"
+    # cursor = "<seq>|<maxChatId>" so the map skips the backlog at start
+    assert decode_file((tmp_path / cfg.directive_cursor_name).read_text(encoding="utf-8")) == "0|0"
+
+    # a new change increments the seq filename + cursor (fresh name defeats the cache)
+    hub.post_chat("Dakkar", "hi", kind="ai", source=p)
+    writer.flush()  # -> TavernDir1.txt
+    assert (tmp_path / "TavernDir1.txt").exists()
+    assert decode_file((tmp_path / cfg.directive_cursor_name).read_text(encoding="utf-8")) == "1|1"
+
+
+def test_wc3_seq_files_rotate_and_prune(tmp_path):
+    cfg = Config()
+    cfg.directive_seq_keep = 3
+    hub = Hub(cfg)
+    p = _persona("Dakkar", 3)
+    hub.register([p])
+    writer = DirectiveWriter(tmp_path, hub, cfg, wc3=True)
+    hub.on_directive = writer.note_directive
+    for _ in range(6):
+        hub.record_directive(p, Directive(strategy="attack", aggression=0.5))
+        writer._dirty = True
+        writer.flush()
+    # only the last `keep` seq files remain
+    remaining = sorted(f.name for f in tmp_path.glob("TavernDir[0-9]*.txt"))
+    assert remaining == ["TavernDir3.txt", "TavernDir4.txt", "TavernDir5.txt"]
 
 
 def test_state_watcher_raw(tmp_path):

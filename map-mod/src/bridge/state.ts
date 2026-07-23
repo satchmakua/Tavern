@@ -5,6 +5,7 @@
  * simulation, so it's safe to do on the host without syncing.
  */
 import { File } from "w3ts/system/file";
+import { drainChat } from "./chatcapture";
 import { STATE_FILE } from "./settings";
 
 function jsonEscape(s: string): string {
@@ -58,6 +59,17 @@ export function exportState(gameSeconds: number): void {
   const mins = math.floor(gameSeconds / 60);
   const secs = math.floor(gameSeconds % 60);
   const clock = `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  const json = `{"game_time":"${clock}","players":{${table.concat(parts, ",")}}}`;
+
+  // Drain any human chat typed since the last export → new_chat (daemon routes it).
+  let newChat = "";
+  const chat = drainChat();
+  if (chat.length > 0) {
+    const items = chat.map(
+      (c) => `{"speaker":"${jsonEscape(c.speaker)}","text":"${jsonEscape(c.text)}"}`
+    );
+    newChat = `,"new_chat":[${table.concat(items, ",")}]`;
+  }
+
+  const json = `{"game_time":"${clock}","players":{${table.concat(parts, ",")}}${newChat}}`;
   File.write(STATE_FILE, json);
 }

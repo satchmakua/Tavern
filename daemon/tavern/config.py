@@ -55,7 +55,12 @@ class Config:
     # Map writes <bridge_dir>/TavernState.txt; daemon writes TavernDirective.txt.
     # (w3ts File requires .txt/.pld; bridge_dir is the map's CustomMapData folder.)
     state_file_name: str = "TavernState.txt"
-    directive_file_name: str = "TavernDirective.txt"
+    directive_file_name: str = "TavernDirective.txt"  # raw mode (offline testing)
+    # wc3 mode: rotating seq files defeat the Reforged Preload cache bug (map's
+    # Preloader caches a filename for the whole session, so each update needs a new name).
+    directive_seq_prefix: str = "TavernDir"           # -> TavernDir0.txt, TavernDir1.txt, …
+    directive_cursor_name: str = "TavernDirCursor.txt"  # "<seq>|<maxChatId>"; map reads once at start
+    directive_seq_keep: int = 30                       # keep this many recent seq files
     state_poll_interval: float = 0.5     # how often to check the state file for changes
     directive_flush_interval: float = 0.5  # how often to flush pending directives to disk
     directive_chat_limit: int = 50       # bounded chat log kept in the directive file
